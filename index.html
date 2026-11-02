@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Musculoskeletal Chart Lab – Interactive EHR</title>
+<style>
+/* ── Reset & Base ── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1a1a;background:#dce3ec;min-height:100vh;}
+
+/* ── Top Bar ── */
+#topbar{background:#0d2b4e;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:44px;position:sticky;top:0;z-index:200;}
+#topbar .logo{font-size:15px;font-weight:700;letter-spacing:.5px;}
+#topbar .subtitle{font-size:11px;color:#a0b8d0;}
+.badge{background:#c0392b;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;margin-left:8px;animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+/* ── Patient Selector ── */
+#patient-nav{background:#1a3a5c;display:flex;gap:4px;padding:8px 18px;overflow-x:auto;}
+.pt-btn{background:#2c5f8a;color:#c8dff0;border:none;border-radius:4px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .2s;}
+.pt-btn:hover{background:#3a7ab5;}
+.pt-btn.active{background:#fff;color:#0d2b4e;}
+
+/* ── Main Layout ── */
+#main{max-width:960px;margin:20px auto;padding:0 12px;}
+
+/* ── Chart Card ── */
+.chart-card{background:#fff;border-radius:6px;border:1px solid #b0bec8;box-shadow:0 2px 8px rgba(0,0,0,.12);overflow:hidden;display:none;}
+.chart-card.active{display:block;}
+
+/* ── Chart Header ── */
+.chart-header{background:#1a3a5c;color:#fff;padding:10px 18px;display:flex;justify-content:space-between;align-items:center;}
+.chart-header .facility{font-size:14px;font-weight:700;}
+.chart-header .meta{font-size:11px;text-align:right;line-height:1.7;color:#b0cce0;}
+
+/* ── Patient Banner ── */
+.patient-banner{background:#e8f0f8;border-bottom:2px solid #1a3a5c;padding:8px 18px;display:flex;gap:22px;flex-wrap:wrap;}
+.field{display:flex;flex-direction:column;}
+.field .lbl{font-size:10px;text-transform:uppercase;color:#5a6a7a;font-weight:600;}
+.field .val{font-size:13px;font-weight:700;color:#1a3a5c;}
+
+/* ── Alert Banner ── */
+.alert-banner{padding:7px 16px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;}
+.alert-banner.yellow{background:#fff3cd;border-left:5px solid #e6a817;color:#7a4f00;}
+.alert-banner.red{background:#fde8e8;border-left:5px solid #c0392b;color:#7a0000;animation:alertpulse 2s infinite;}
+@keyframes alertpulse{0%,100%{background:#fde8e8;}50%{background:#fcc;}}
+
+/* ── Tab Bar ── */
+.tab-bar{display:flex;background:#f0f4f8;border-bottom:2px solid #1a3a5c;overflow-x:auto;}
+.tab-btn{padding:8px 18px;font-size:12px;font-weight:600;color:#5a6a7a;border:none;background:none;cursor:pointer;border-right:1px solid #dde3ea;white-space:nowrap;transition:background .15s,color .15s;}
+.tab-btn:hover{background:#dce8f5;color:#1a3a5c;}
+.tab-btn.active{background:#1a3a5c;color:#fff;}
+
+/* ── Tab Content ── */
+.tab-content{display:none;padding:16px 18px;}
+.tab-content.active{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.tab-content.single{grid-template-columns:1fr;}
+.span2{grid-column:1/-1;}
+
+/* ── Section ── */
+.section{border:1px solid #dde3ea;border-radius:4px;overflow:hidden;}
+.sec-title{background:#2c5f8a;color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;}
+.sec-title .toggle-icon{font-size:14px;transition:transform .2s;}
+.sec-title.collapsed .toggle-icon{transform:rotate(-90deg);}
+.sec-body{padding:8px 10px;transition:all .2s;}
+.sec-body.hidden{display:none;}
+
+/* ── Rows ── */
+.row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f2f5;font-size:12px;}
+.row:last-child{border-bottom:none;}
+.row .k{color:#4a5a6a;font-weight:600;}
+.row .v{color:#1a1a1a;text-align:right;}
+.v.flag{color:#c0392b;font-weight:700;}
+.v.ok{color:#1a7a3c;font-weight:700;}
+.v.warn{color:#d4860a;font-weight:700;}
+
+/* ── Tables ── */
+table.grid{width:100%;border-collapse:collapse;font-size:11.5px;}
+table.grid th{background:#e8f0f8;color:#1a3a5c;font-weight:700;padding:5px 7px;border:1px solid #c8d4e0;text-align:center;}
+table.grid td{padding:5px 7px;border:1px solid #dde3ea;text-align:center;}
+table.grid tr:nth-child(even) td{background:#f7f9fc;}
+table.grid td.flag{color:#c0392b;font-weight:700;}
+table.grid td.ok{color:#1a7a3c;font-weight:700;}
+table.grid td.warn{color:#d4860a;font-weight:700;}
+table.grid td.err{color:#c0392b;font-weight:700;background:#fde8e8;}
+
+/* ── Orders ── */
+.order-item{font-size:12px;padding:4px 0;border-bottom:1px solid #f0f2f5;display:flex;gap:6px;align-items:flex-start;}
+.order-item:last-child{border-bottom:none;}
+.bullet{color:#2c5f8a;font-weight:700;flex-shrink:0;}
+.bullet.red{color:#c0392b;}
+
+/* ── Notes (clickable) ── */
+.note-card{background:#f7f9fc;border:1px solid #dde3ea;border-radius:4px;padding:8px 10px;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;}
+.note-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.15);border-color:#2c5f8a;}
+.note-card:last-child{margin-bottom:0;}
+.note-ts{font-size:10px;font-weight:700;color:#2c5f8a;display:block;margin-bottom:3px;}
+.note-preview{font-size:12px;color:#2a2a2a;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.note-hint{font-size:10px;color:#2c5f8a;margin-top:4px;font-style:italic;}
+
+/* ── Modal ── */
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;}
+#modal-overlay.open{display:flex;}
+#modal-box{background:#fff;border-radius:6px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.3);}
+#modal-header{background:#1a3a5c;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-radius:6px 6px 0 0;}
+#modal-header h3{font-size:14px;}
+#modal-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;}
+#modal-body{padding:16px;font-size:13px;line-height:1.7;color:#2a2a2a;}
+
+/* ── SBAR Panel ── */
+.sbar-grid{display:grid;grid-template-columns:80px 1fr;gap:0;}
+.sbar-label{background:#2c5f8a;color:#fff;font-weight:700;font-size:13px;padding:10px 12px;border-bottom:1px solid #1a3a5c;display:flex;align-items:center;justify-content:center;}
+.sbar-text{padding:10px 12px;border-bottom:1px solid #dde3ea;font-size:12px;line-height:1.6;}
+.sbar-label:last-of-type,.sbar-text:last-of-type{border-bottom:none;}
+
+/* ── Footer ── */
+.chart-footer{background:#f0f4f8;border-top:1px solid #dde3ea;padding:6px 18px;display:flex;justify-content:space-between;font-size:10px;color:#7a8a9a;}
+
+/* ── Tooltip ── */
+[data-tip]{position:relative;cursor:help;}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:120%;left:50%;transform:translateX(-50%);background:#1a3a5c;color:#fff;font-size:11px;padding:4px 8px;border-radius:4px;white-space:nowrap;z-index:300;pointer-events:none;}
+
+/* ── Responsive ── */
+@media(max-width:640px){
+  .tab-content.active{grid-template-columns:1fr;}
+  .span2{grid-column:1;}
+  .patient-banner{gap:12px;}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div>
+    <span class="logo">🏥 University Medical Center — EHR Simulation</span>
+    <span class="badge">FICTIONAL TRAINING DATA</span>
+  </div>
+  <div class="subtitle">Musculoskeletal Chart Lab · Care of the Adult · MSN Semester 2</div>
+</div>
+
+<!-- PATIENT SELECTOR -->
+<div id="patient-nav">
+  <button class="pt-btn active" onclick="showPatient('A',this)">Patient A — Evelyn Carter</button>
+  <button class="pt-btn" onclick="showPatient('B',this)">Patient B — Marcus Reed</button>
+  <button class="pt-btn" onclick="showPatient('C',this)">Patient C — Diane Walker</button>
+  <button class="pt-btn" onclick="showPatient('D',this)">Patient D — Leah Morgan</button>
+</div>
+
+<div id="main">
+
+<!-- PATIENT A -->
+<div class="chart-card active" id="chart-A">
+  <div class="chart-header">
+    <span class="facility">Ortho Surgical 4W · Room 412B</span>
+    <span class="meta">Admission: Yesterday (Elective) &nbsp;|&nbsp; POD 1 &nbsp;|&nbsp; Attending: Dr. J. Okafor, MD</span>
+  </div>
+  <div class="patient-banner">
+    <div class="field"><span class="lbl">Patient</span><span class="val">Carter, Evelyn M.</span></div>
+    <div class="field"><span class="lbl">DOB / Age</span><span class="val">03/14/1946 · 78 F</span></div>
+    <div class="field"><span class="lbl">MRN</span><span class="val">UMC-2024-00471</span></div>
+    <div class="field"><span class="lbl">Diagnosis</span><span class="val">L Hip Hemiarthroplasty (POD 1)</span></div>
+    <div class="field"><span class="lbl">Allergies</span><span class="val" style="color:#c0392b;">Penicillin (rash)</span></div>
+    <div class="field"><span class="lbl">Code Status</span><span class="val">Full Code</span></div>
+  </div>
+  <div class="alert-banner yellow">⚠ Posterior Hip Precautions Active &nbsp;|&nbsp; WBAT with Assist &nbsp;|&nbsp; Fall Risk: HIGH</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('A','flowsheet',this)">Flowsheet</button>
+    <button class="tab-btn" onclick="showTab('A','mar',this)">MAR</button>
+    <button class="tab-btn" onclick="showTab('A','orders',this)">Orders</button>
+    <button class="tab-btn" onclick="showTab('A','notes',this)">Nursing Notes</button>
+    <button class="tab-btn" onclick="showTab('A','sbar',this)">SBAR</button>
+    <button class="tab-btn" onclick="showTab('A','careplan',this)">Care Plan</button>
+  </div>
+  <div class="tab-content active" id="A-flowsheet">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Vital Signs Trend <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Time</th><th>BP (mmHg)</th><th>HR (bpm)</th><th>RR</th><th>SpO₂</th><th>Temp °F</th><th>Pain 0–10</th></tr>
+          <tr><td>09:45</td><td class="ok">126/72</td><td class="ok">88</td><td>16</td><td class="ok">97%</td><td>98.4</td><td>4</td></tr>
+          <tr><td>10:00</td><td class="ok">124/70</td><td class="ok">90</td><td>17</td><td class="ok">97%</td><td>98.4</td><td>4</td></tr>
+          <tr><td>10:30</td><td class="warn">110/64</td><td class="warn">102</td><td>18</td><td class="warn">95%</td><td>98.2</td><td>5</td></tr>
+          <tr><td>11:00</td><td class="flag" data-tip="Hypotension — escalate">88/52 ↓</td><td class="flag" data-tip="Tachycardia">118 ↑</td><td class="flag">22</td><td class="flag">93%</td><td>97.9</td><td class="flag">7</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Distal Neurovascular Check — 10:00 <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Color</span><span class="v ok">Pink</span></div>
+        <div class="row"><span class="k">Temperature</span><span class="v ok">Warm</span></div>
+        <div class="row"><span class="k">Cap Refill</span><span class="v ok">&lt; 2 sec</span></div>
+        <div class="row"><span class="k">Pedal Pulse (L)</span><span class="v ok">2+ / palpable</span></div>
+        <div class="row"><span class="k">Sensation</span><span class="v ok">Intact</span></div>
+        <div class="row"><span class="k">Movement</span><span class="v ok">Intact — precautions followed</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Wound / Dressing Assessment <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Site</span><span class="v">L posterior hip incision</span></div>
+        <div class="row"><span class="k">10:00 Dressing</span><span class="v">Intact — small marked drainage</span></div>
+        <div class="row"><span class="k">Drainage type</span><span class="v warn">Serosanguineous — small, marked</span></div>
+        <div class="row"><span class="k">Odor</span><span class="v ok">None</span></div>
+        <div class="row"><span class="k">Surrounding skin</span><span class="v ok">No redness / induration</span></div>
+        <div class="row"><span class="k">11:00 Update</span><span class="v flag">⚠ Dressing saturated — fresh blood</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="A-mar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Medication Administration Record <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Medication</th><th>Dose / Route</th><th>Scheduled</th><th>Status</th><th>Given By</th></tr>
+          <tr><td>Oxycodone</td><td>5 mg PO</td><td>09:00</td><td class="ok">Given 09:40</td><td>RN L. Simmons</td></tr>
+          <tr><td>Ondansetron</td><td>4 mg IV PRN</td><td>PRN</td><td class="ok">Given 08:15</td><td>RN L. Simmons</td></tr>
+          <tr><td>Enoxaparin</td><td>40 mg SubQ</td><td>Tomorrow 08:00</td><td class="warn">Not Yet Due</td><td>—</td></tr>
+          <tr><td>Acetaminophen</td><td>650 mg PO q6h</td><td>10:00</td><td class="ok">Given 10:05</td><td>RN L. Simmons</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="A-orders">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Active Orders <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="order-item"><span class="bullet">▸</span> Vital signs q1h × 8h, then q4h</div>
+        <div class="order-item"><span class="bullet">▸</span> Distal neurovascular checks q2h</div>
+        <div class="order-item"><span class="bullet">▸</span> WBAT L hip — PT assist required</div>
+        <div class="order-item"><span class="bullet">▸</span> Posterior hip precautions at all times</div>
+        <div class="order-item"><span class="bullet">▸</span> Incentive spirometry q1h while awake</div>
+        <div class="order-item"><span class="bullet">▸</span> Sequential compression devices — bilateral LE</div>
+        <div class="order-item"><span class="bullet">▸</span> Regular diet — advance as tolerated</div>
+        <div class="order-item"><span class="bullet red">!</span> Social work consult — home support incomplete</div>
+        <div class="order-item"><span class="bullet red">!</span> CBC STAT — ordered 11:05 (rapid response)</div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="A-notes">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Nursing Notes — click to expand <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="note-card" onclick="openModal('10:00 — RN L. Simmons','Patient alert and oriented ×3. Reports pain 4/10 at incision site. Dressing intact with small marked drainage area. Distal neurovascular findings intact bilaterally. Posterior precautions reinforced. Oxycodone given at 09:40 with effect noted. IV site patent, no infiltration. Patient instructed to call for assistance before moving.')">
+          <span class="note-ts">10:00 — RN L. Simmons</span>
+          <div class="note-preview">Patient alert and oriented ×3. Reports pain 4/10 at incision site. Dressing intact with small marked drainage area...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+        <div class="note-card" onclick="openModal('11:05 — RN L. Simmons ⚠ URGENT','Patient reports sudden dizziness and increased thigh pain. Appears pale and clammy. BP 88/52, HR 118. Dressing saturated with fresh blood.\n\nRapid response activated. Surgical team (Dr. Okafor) notified immediately. Patient kept supine. O₂ applied per protocol at 4L/min via NC. IV access confirmed patent. CBC ordered STAT. Patient instructed not to get up. Family at bedside — informed of situation.\n\nCompare: BP 126/72 → 88/52; HR 88 → 118. Active bleeding suspected. Anticoagulant administration held pending clinician direction.')">
+          <span class="note-ts" style="color:#c0392b;">11:05 — RN L. Simmons ⚠ URGENT</span>
+          <div class="note-preview">Patient reports sudden dizziness and increased thigh pain. Appears pale and clammy. BP 88/52, HR 118. Dressing saturated...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="A-sbar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Example SBAR Communication <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="sbar-grid">
+          <div class="sbar-label">S</div>
+          <div class="sbar-text">Evelyn is deteriorating after hip hemiarthroplasty. BP now 88/52 and fresh bloody drainage saturating dressing.</div>
+          <div class="sbar-label">B</div>
+          <div class="sbar-text">She is 78, postoperative this morning. Earlier BP 126/72 and HR 88. Enoxaparin has not been given.</div>
+          <div class="sbar-label">A</div>
+          <div class="sbar-text">HR now 118, pale/clammy, faint, and thigh swelling increased. Concern for bleeding and impaired perfusion. CBC pending.</div>
+          <div class="sbar-label">R</div>
+          <div class="sbar-text">Immediate bedside evaluation; emergency escalation activated and urgent assessment/treatment orders needed.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content" id="A-careplan">
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Nursing Priorities <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Priority 1</span><span class="v flag">ABC assessment / perfusion</span></div>
+        <div class="row"><span class="k">Priority 2</span><span class="v">Pain management</span></div>
+        <div class="row"><span class="k">Priority 3</span><span class="v">Wound / neurovascular monitoring</span></div>
+        <div class="row"><span class="k">Priority 4</span><span class="v">Safe movement / fall prevention</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Discharge Planning <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Mobility goal</span><span class="v">Assisted ambulation POD 1</span></div>
+        <div class="row"><span class="k">VTE prophylaxis</span><span class="v">Enoxaparin — next dose tomorrow</span></div>
+        <div class="row"><span class="k">PT/OT</span><span class="v">PT consult active</span></div>
+        <div class="row"><span class="k">Teaching</span><span class="v">Precautions, transfers, wound care</span></div>
+        <div class="row"><span class="k">Home support</span><span class="v flag">⚠ Incomplete — SW consult pending</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-footer"><span>FICTIONAL TRAINING DATA — NOT FOR CLINICAL USE</span><span>Patient A · Page 1 of 4</span></div>
+</div>
+
+<!-- PATIENT B -->
+<div class="chart-card" id="chart-B">
+  <div class="chart-header">
+    <span class="facility">Ortho/Trauma 3E · Room 318A</span>
+    <span class="meta">Admission: Today (Emergency) &nbsp;|&nbsp; Attending: Dr. P. Nguyen, MD</span>
+  </div>
+  <div class="patient-banner">
+    <div class="field"><span class="lbl">Patient</span><span class="val">Reed, Marcus T.</span></div>
+    <div class="field"><span class="lbl">DOB / Age</span><span class="val">07/22/1991 · 33 M</span></div>
+    <div class="field"><span class="lbl">MRN</span><span class="val">UMC-2024-00839</span></div>
+    <div class="field"><span class="lbl">Diagnosis</span><span class="val">R Tibial Fracture — Long Leg Cast</span></div>
+    <div class="field"><span class="lbl">Allergies</span><span class="val ok">NKDA</span></div>
+    <div class="field"><span class="lbl">Code Status</span><span class="val">Full Code</span></div>
+  </div>
+  <div class="alert-banner yellow">⚠ Non-Weight-Bearing Right Leg &nbsp;|&nbsp; Hourly Neurovascular Checks Ordered</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('B','flowsheet',this)">Flowsheet</button>
+    <button class="tab-btn" onclick="showTab('B','mar',this)">MAR</button>
+    <button class="tab-btn" onclick="showTab('B','orders',this)">Orders</button>
+    <button class="tab-btn" onclick="showTab('B','notes',this)">Nursing Notes</button>
+    <button class="tab-btn" onclick="showTab('B','sbar',this)">SBAR</button>
+    <button class="tab-btn" onclick="showTab('B','careplan',this)">Care Plan</button>
+  </div>
+  <div class="tab-content active" id="B-flowsheet">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Vital Signs Trend <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Time</th><th>BP (mmHg)</th><th>HR (bpm)</th><th>RR</th><th>SpO₂</th><th>Temp °F</th><th>Pain 0–10</th></tr>
+          <tr><td>11:00</td><td class="ok">128/78</td><td class="ok">82</td><td>16</td><td class="ok">98%</td><td>98.6</td><td class="ok">4</td></tr>
+          <tr><td>12:00</td><td class="ok">130/80</td><td class="ok">84</td><td>16</td><td class="ok">98%</td><td>98.6</td><td class="ok">4</td></tr>
+          <tr><td>13:00</td><td class="ok">132/82</td><td class="warn">92</td><td>18</td><td class="ok">97%</td><td>98.8</td><td class="flag" data-tip="Escalate — pain spike despite analgesia">9 ↑</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Distal Neurovascular Check — R Leg (Trend) <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Parameter</th><th>12:00</th><th>13:00</th></tr>
+          <tr><td>Toe color</td><td class="ok">Warm / Pink</td><td class="ok">Warm / Pink</td></tr>
+          <tr><td>Cap refill</td><td class="ok">&lt; 2 sec</td><td class="warn">2–3 sec</td></tr>
+          <tr><td>Pedal pulse</td><td class="ok">2+</td><td class="ok">2+ (present ≠ safe)</td></tr>
+          <tr><td>Sensation</td><td class="ok">Intact</td><td class="flag">Tingling noted ⚠</td></tr>
+          <tr><td>Movement</td><td class="ok">Intact</td><td class="warn">Limited — pain with motion</td></tr>
+          <tr><td>Pain w/ passive stretch</td><td class="ok">None</td><td class="flag">Yes — increased ⚠</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="B-mar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Medication Administration Record <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Medication</th><th>Dose / Route</th><th>Scheduled</th><th>Status</th><th>Note</th></tr>
+          <tr><td>Oxycodone</td><td>5 mg PO</td><td>12:00</td><td class="ok">Given 12:05</td><td>Pain 4/10 at time of administration</td></tr>
+          <tr><td>Ibuprofen</td><td>600 mg PO q6h</td><td>12:00</td><td class="ok">Given 12:05</td><td>—</td></tr>
+          <tr><td>Enoxaparin</td><td>40 mg SubQ</td><td>20:00</td><td class="warn">Scheduled</td><td>VTE prophylaxis</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="B-orders">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Active Orders <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="order-item"><span class="bullet">▸</span> Neurovascular checks R leg q1h</div>
+        <div class="order-item"><span class="bullet">▸</span> Non-weight-bearing R leg — strict</div>
+        <div class="order-item"><span class="bullet">▸</span> Elevate R leg — at heart level (NOT above heart if compartment syndrome suspected)</div>
+        <div class="order-item"><span class="bullet">▸</span> Report immediately: ↑ pain, tingling, pressure under cast, passive stretch pain</div>
+        <div class="order-item"><span class="bullet">▸</span> PT consult — crutch training, home safety</div>
+        <div class="order-item"><span class="bullet red">!</span> Orthopedic STAT evaluation — compartment syndrome concern (13:05)</div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="B-notes">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Nursing Notes — click to expand <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="note-card" onclick="openModal('12:00 — RN D. Patel','Patient resting comfortably. Pain 4/10 after oxycodone. Toes warm and pink, cap refill &lt;2 sec, pulse 2+, sensation intact. Cast intact, no visible cracking or soiling. NWB reinforced. Patient verbalized understanding of mobility restrictions and when to call for help.')">
+          <span class="note-ts">12:00 — RN D. Patel</span>
+          <div class="note-preview">Patient resting comfortably. Pain 4/10 after oxycodone. Toes warm and pink, cap refill &lt;2 sec, pulse 2+...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+        <div class="note-card" onclick="openModal('13:00 — RN D. Patel ⚠ URGENT','Patient reports sudden increase in pain to 9/10, new tingling in toes, and sensation of pressure under cast. Pain increased with gentle passive stretch of toes.\n\nOrthopedic team (Dr. Nguyen) notified immediately. Limb maintained at heart level — NOT elevated above heart per compartment syndrome protocol. Do not remove or cut cast independently.\n\nUrgent evaluation for compartment syndrome initiated. Cast removal/bivalving per orthopedic direction pending. Analgesia alone is not an adequate response to these findings.\n\nNote: Presence of 2+ pulse does NOT exclude compartment syndrome. Do not wait for pulselessness or paralysis before escalating.')">
+          <span class="note-ts" style="color:#c0392b;">13:00 — RN D. Patel ⚠ URGENT</span>
+          <div class="note-preview">Patient reports sudden increase in pain to 9/10, new tingling in toes, and sensation of pressure under cast...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="B-sbar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Example SBAR Communication <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="sbar-grid">
+          <div class="sbar-label">S</div>
+          <div class="sbar-text">Marcus has rapidly worsening pain and sensory changes in his casted right leg.</div>
+          <div class="sbar-label">B</div>
+          <div class="sbar-text">Tibial fracture casted this morning; pain was 4/10 at noon after oxycodone.</div>
+          <div class="sbar-label">A</div>
+          <div class="sbar-text">At 13:00 pain 9/10, new tingling, and increased pain with passive movement. Refill 3 seconds, pulse remains 2+. Concern for compartment syndrome / neurovascular compromise.</div>
+          <div class="sbar-label">R</div>
+          <div class="sbar-text">Immediate bedside orthopedic evaluation and directions for cast/limb management.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content" id="B-careplan">
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Nursing Priorities <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Priority 1</span><span class="v flag">Neurovascular assessment — escalate</span></div>
+        <div class="row"><span class="k">Priority 2</span><span class="v">Pain reassessment</span></div>
+        <div class="row"><span class="k">Priority 3</span><span class="v">Cast / skin care</span></div>
+        <div class="row"><span class="k">Priority 4</span><span class="v">NWB safety education</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Discharge Planning <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">PT consult</span><span class="v">Crutch training, home safety</span></div>
+        <div class="row"><span class="k">Home steps</span><span class="v warn">Require PT planning before discharge</span></div>
+        <div class="row"><span class="k">Ortho follow-up</span><span class="v">1 week post-discharge</span></div>
+        <div class="row"><span class="k">Teaching</span><span class="v">NWB, cast care, when to call 911</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-footer"><span>FICTIONAL TRAINING DATA — NOT FOR CLINICAL USE</span><span>Patient B · Page 2 of 4</span></div>
+</div>
+
+<!-- PATIENT C -->
+<div class="chart-card" id="chart-C">
+  <div class="chart-header">
+    <span class="facility">Med-Surg 5N · Room 521</span>
+    <span class="meta">Admission: 3 days ago &nbsp;|&nbsp; Attending: Dr. A. Mensah, MD</span>
+  </div>
+  <div class="patient-banner">
+    <div class="field"><span class="lbl">Patient</span><span class="val">Walker, Diane R.</span></div>
+    <div class="field"><span class="lbl">DOB / Age</span><span class="val">11/05/1958 · 65 F</span></div>
+    <div class="field"><span class="lbl">MRN</span><span class="val">UMC-2024-01152</span></div>
+    <div class="field"><span class="lbl">Diagnosis</span><span class="val">L Tibial Osteomyelitis (MSSA) — Post-Debridement</span></div>
+    <div class="field"><span class="lbl">Allergies</span><span class="val" style="color:#c0392b;">Vancomycin (red man syndrome)</span></div>
+    <div class="field"><span class="lbl">Code Status</span><span class="val">Full Code</span></div>
+  </div>
+  <div class="alert-banner red">🚨 IV Access Lost 10:15 — Cefazolin 08:00 Dose NOT Given — Replacement IV Unsuccessful — Vascular Access Team Called</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('C','mar',this)">MAR</button>
+    <button class="tab-btn" onclick="showTab('C','flowsheet',this)">Flowsheet</button>
+    <button class="tab-btn" onclick="showTab('C','labs',this)">Labs</button>
+    <button class="tab-btn" onclick="showTab('C','orders',this)">Orders</button>
+    <button class="tab-btn" onclick="showTab('C','notes',this)">Nursing Notes</button>
+    <button class="tab-btn" onclick="showTab('C','sbar',this)">SBAR</button>
+  </div>
+  <div class="tab-content active single" id="C-mar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">MAR — Cefazolin 2 g IV q8h (Culture-Directed) <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Scheduled</th><th>Actual</th><th>Status</th><th>By</th><th>Notes</th></tr>
+          <tr><td>00:05 (prev. day)</td><td>00:10</td><td class="ok">Given</td><td>RN K. Torres</td><td>IV patent, infusion completed</td></tr>
+          <tr><td>08:00</td><td>—</td><td class="flag">NOT GIVEN ⚠</td><td>—</td><td>IV access lost 10:15; dose not administered; prescriber notified</td></tr>
+          <tr><td>16:00</td><td>—</td><td class="warn">Pending — access required</td><td>—</td><td>Vascular access team consult placed</td></tr>
+        </table>
+        <div style="margin-top:10px;padding:8px;background:#fde8e8;border-radius:4px;font-size:12px;color:#7a0000;font-weight:600;">
+          ⚠ Do NOT double the dose or give two doses within 6 hours. Clarify timing with prescriber and pharmacy before next administration.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content" id="C-flowsheet">
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Vital Signs — 08:00 <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Temp</span><span class="v ok">98.8°F — Afebrile</span></div>
+        <div class="row"><span class="k">BP</span><span class="v ok">118/74 mmHg</span></div>
+        <div class="row"><span class="k">HR</span><span class="v ok">78 bpm</span></div>
+        <div class="row"><span class="k">RR</span><span class="v ok">16</span></div>
+        <div class="row"><span class="k">SpO₂</span><span class="v ok">98%</span></div>
+        <div class="row"><span class="k">Pain</span><span class="v warn">3/10 — L leg wound</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">IV Access Log <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">On admission</span><span class="v ok">R antecubital PIV — patent</span></div>
+        <div class="row"><span class="k">10:15</span><span class="v flag">PIV removed — infiltration</span></div>
+        <div class="row"><span class="k">10:30</span><span class="v flag">Re-insertion ×2 — unsuccessful</span></div>
+        <div class="row"><span class="k">11:00</span><span class="v warn">Vascular access team notified</span></div>
+        <div class="row"><span class="k">Current</span><span class="v flag">⚠ No IV access</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="C-labs">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Laboratory Results <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Test</th><th>Result</th><th>Reference</th><th>Trend</th></tr>
+          <tr><td>WBC</td><td class="flag">13.8 × 10³/µL</td><td>4.5–11.0</td><td class="warn">↑ Elevated</td></tr>
+          <tr><td>ESR</td><td class="flag">74 mm/hr</td><td>&lt; 20</td><td class="warn">↑ Elevated</td></tr>
+          <tr><td>CRP</td><td class="warn">38 mg/L</td><td>&lt; 10</td><td class="ok">↓ Improving (was 62)</td></tr>
+          <tr><td>Blood culture</td><td class="ok">MSSA</td><td>—</td><td class="ok">Sensitive to cefazolin</td></tr>
+          <tr><td>Glucose (08:00)</td><td class="warn">148 mg/dL</td><td>70–100</td><td class="warn">Monitor — ongoing</td></tr>
+          <tr><td>BMP (other)</td><td class="ok">WNL</td><td>—</td><td class="ok">Stable</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="C-orders">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Active Orders <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="order-item"><span class="bullet">▸</span> Cefazolin 2 g IV q8h — culture-directed (MSSA)</div>
+        <div class="order-item"><span class="bullet red">!</span> Do NOT double dose or give doses &lt; 6h apart</div>
+        <div class="order-item"><span class="bullet">▸</span> Glucose monitoring AC and HS</div>
+        <div class="order-item"><span class="bullet">▸</span> Wound care L tibia — daily and PRN</div>
+        <div class="order-item"><span class="bullet red">!</span> Vascular access team consult — STAT</div>
+        <div class="order-item"><span class="bullet red">!</span> Pharmacy consult — antibiotic timing clarification after access loss</div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="C-notes">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Nursing Notes — click to expand <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="note-card" onclick="openModal('08:00 — RN K. Torres','Patient afebrile and stable. Cefazolin 08:00 dose due. IV site assessed — appeared patent at 07:45. Dose preparation initiated. Wound dressing intact, minimal drainage. Patient reports pain 3/10. Glucose 148 mg/dL — noted, ongoing monitoring per orders.')">
+          <span class="note-ts">08:00 — RN K. Torres</span>
+          <div class="note-preview">Patient afebrile and stable. Cefazolin 08:00 dose due. IV site assessed — appeared patent at 07:45...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+        <div class="note-card" onclick="openModal('10:15 — RN K. Torres ⚠ MEDICATION INTERRUPTION','PIV noted with swelling and patient complaint of pain at site — infiltration confirmed. IV removed.\n\nCefazolin 08:00 dose was NOT administered prior to access loss.\n\nPrescriber Dr. Mensah notified. Two re-insertion attempts unsuccessful. Vascular access team paged STAT. Pharmacy notified regarding delayed dose and timing for next scheduled dose.\n\nIMPORTANT: Do not administer a double dose. Do not give doses less than 6 hours apart. Await prescriber and pharmacy guidance on timing before proceeding with 16:00 dose.\n\nPatient remains afebrile and hemodynamically stable. Wound unchanged. Continuing to monitor for signs of clinical deterioration.')">
+          <span class="note-ts" style="color:#c0392b;">10:15 — RN K. Torres ⚠ MEDICATION INTERRUPTION</span>
+          <div class="note-preview">PIV noted with swelling and patient complaint of pain at site — infiltration confirmed. IV removed. Cefazolin 08:00 dose was NOT administered...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="C-sbar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Example SBAR Communication <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="sbar-grid">
+          <div class="sbar-label">S</div>
+          <div class="sbar-text">Diane's 08:00 cefazolin remains unadministered at noon and she has no IV access.</div>
+          <div class="sbar-label">B</div>
+          <div class="sbar-text">MSSA tibial osteomyelitis after debridement; cefazolin 2 g q8h; last dose 00:05. Afebrile and stable currently.</div>
+          <div class="sbar-label">A</div>
+          <div class="sbar-text">Leaking IV removed at 10:15, replacement unsuccessful. 08:00 dose not given. Vascular access team called.</div>
+          <div class="sbar-label">R</div>
+          <div class="sbar-text">Prompt clarification of delayed-dose timing and an access/treatment plan with pharmacy and vascular access; reassess if condition changes.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-footer"><span>FICTIONAL TRAINING DATA — NOT FOR CLINICAL USE</span><span>Patient C · Page 3 of 4</span></div>
+</div>
+
+<!-- PATIENT D -->
+<div class="chart-card" id="chart-D">
+  <div class="chart-header">
+    <span class="facility">Rheumatology Clinic · Appt 08:50</span>
+    <span class="meta">Visit Type: RA Follow-Up &nbsp;|&nbsp; Provider: Dr. C. Osei, MD</span>
+  </div>
+  <div class="patient-banner">
+    <div class="field"><span class="lbl">Patient</span><span class="val">Morgan, Leah S.</span></div>
+    <div class="field"><span class="lbl">DOB / Age</span><span class="val">09/30/1969 · 55 F</span></div>
+    <div class="field"><span class="lbl">MRN</span><span class="val">UMC-2024-00294</span></div>
+    <div class="field"><span class="lbl">Diagnosis</span><span class="val">Rheumatoid Arthritis — Established</span></div>
+    <div class="field"><span class="lbl">Allergies</span><span class="val" style="color:#c0392b;">Sulfa (rash)</span></div>
+    <div class="field"><span class="lbl">Code Status</span><span class="val">Full Code</span></div>
+  </div>
+  <div class="alert-banner red">🚨 MEDICATION DISCREPANCY: Draft instructions list Methotrexate DAILY — conflicts with signed WEEKLY plan. DO NOT RELEASE. Verify with prescriber/pharmacist immediately.</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('D','reconcile',this)">Med Reconciliation</button>
+    <button class="tab-btn" onclick="showTab('D','homemeds',this)">Home Meds</button>
+    <button class="tab-btn" onclick="showTab('D','labs',this)">Labs</button>
+    <button class="tab-btn" onclick="showTab('D','assessment',this)">Assessment</button>
+    <button class="tab-btn" onclick="showTab('D','notes',this)">Nursing Notes</button>
+    <button class="tab-btn" onclick="showTab('D','sbar',this)">SBAR</button>
+  </div>
+  <div class="tab-content active single" id="D-reconcile">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Medication Reconciliation — Methotrexate <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Document</th><th>Dose</th><th>Frequency</th><th>Tablets</th><th>Status</th></tr>
+          <tr><td>Signed Provider Plan (08:50)</td><td>15 mg</td><td>Once weekly — Fridays</td><td>6 × 2.5 mg</td><td class="ok">✓ VERIFIED — Correct</td></tr>
+          <tr><td>Home Medication Record</td><td>15 mg</td><td>Fridays — last dose 10/16</td><td>6 × 2.5 mg</td><td class="ok">✓ Consistent</td></tr>
+          <tr><td>Draft Discharge Instructions</td><td>15 mg</td><td class="err">EVERY DAY ← ERROR</td><td>6 × 2.5 mg</td><td class="flag">⛔ DO NOT RELEASE</td></tr>
+        </table>
+        <div style="margin-top:10px;padding:8px;background:#fde8e8;border-radius:4px;font-size:12px;color:#7a0000;font-weight:600;">
+          ⚠ Daily methotrexate for RA can cause fatal toxicity. Normal labs do NOT make daily dosing safe. Stop draft, reconcile with prescriber and pharmacy before any release.
+        </div>
+      </div>
+    </div>
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Required Actions Before Discharge <span class="toggle-icon">▾</span></div>
+      <div class="sec-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <div class="order-item"><span class="bullet red">!</span> STOP draft instructions — do not release to patient</div>
+          <div class="order-item"><span class="bullet red">!</span> Clarify with Dr. Osei and pharmacy immediately</div>
+          <div class="order-item"><span class="bullet red">!</span> Correct all affected medication lists via proper process</div>
+          <div class="order-item"><span class="bullet">▸</span> Verify no extra doses taken since last Friday 10/16</div>
+        </div>
+        <div>
+          <div class="order-item"><span class="bullet">▸</span> Teach-back: "Which day, how many tablets, how often?"</div>
+          <div class="order-item"><span class="bullet">▸</span> Discuss toxicity warning signs (mouth sores, SOB, bruising)</div>
+          <div class="order-item"><span class="bullet">▸</span> Confirm folic acid compliance — daily</div>
+          <div class="order-item"><span class="bullet">▸</span> OT follow-up scheduled — adaptive equipment</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="D-homemeds">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Home Medication List <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Medication</th><th>Dose</th><th>Frequency</th><th>Last Dose</th><th>Compliance</th></tr>
+          <tr><td>Methotrexate</td><td>15 mg (6 × 2.5 mg tabs)</td><td>Once weekly — Fridays</td><td>10/16 — confirmed</td><td class="ok">Compliant</td></tr>
+          <tr><td>Folic acid</td><td>1 mg</td><td>Daily</td><td>Today</td><td class="ok">Compliant</td></tr>
+          <tr><td>Naproxen</td><td>500 mg</td><td>BID PRN</td><td>Yesterday</td><td class="ok">PRN use appropriate</td></tr>
+          <tr><td>Omeprazole</td><td>20 mg</td><td>Daily</td><td>Today</td><td class="ok">Compliant</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="D-labs">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Monitoring Labs (Recent) <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <table class="grid">
+          <tr><th>Test</th><th>Result</th><th>Reference</th><th>Interpretation</th></tr>
+          <tr><td>WBC</td><td class="ok">5.8 × 10³/µL</td><td>4.5–11.0</td><td class="ok">Normal</td></tr>
+          <tr><td>Platelets</td><td class="ok">210 × 10³/µL</td><td>150–400</td><td class="ok">Normal</td></tr>
+          <tr><td>AST</td><td class="ok">28 U/L</td><td>&lt; 40</td><td class="ok">Normal</td></tr>
+          <tr><td>ALT</td><td class="ok">32 U/L</td><td>&lt; 56</td><td class="ok">Normal</td></tr>
+          <tr><td>Creatinine</td><td class="ok">0.9 mg/dL</td><td>0.6–1.2</td><td class="ok">Normal</td></tr>
+          <tr><td colspan="4" style="background:#fde8e8;color:#7a0000;font-weight:700;text-align:left;padding:6px;">⚠ Normal labs do NOT make daily methotrexate dosing safe — toxicity risk remains.</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content" id="D-assessment">
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Today's Clinical Assessment <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Morning stiffness</span><span class="v warn">~45 min — bilateral</span></div>
+        <div class="row"><span class="k">Joint swelling</span><span class="v warn">Symmetric — hands/wrists</span></div>
+        <div class="row"><span class="k">Grip strength</span><span class="v flag">Reduced bilaterally</span></div>
+        <div class="row"><span class="k">Dressing difficulty</span><span class="v flag">Yes — reported</span></div>
+        <div class="row"><span class="k">OT Referral</span><span class="v warn">Placed — adaptive equipment</span></div>
+        <div class="row"><span class="k">Folic acid</span><span class="v ok">1 mg daily — compliant</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sec-title" onclick="toggleSection(this)">Provider Plan (08:50) <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="row"><span class="k">Methotrexate</span><span class="v ok">15 mg PO — Fridays only (signed)</span></div>
+        <div class="row"><span class="k">Folic acid</span><span class="v ok">1 mg daily — continue</span></div>
+        <div class="row"><span class="k">Monitoring</span><span class="v">Labs within acceptable ranges</span></div>
+        <div class="row"><span class="k">OT</span><span class="v">Referral for grip/dressing aids</span></div>
+        <div class="row"><span class="k">Next visit</span><span class="v">3 months or sooner PRN</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="D-notes">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Nursing Notes — click to expand <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="note-card" onclick="openModal('08:50 — RN M. Alvarez','Patient presents for routine RA follow-up. Reports ongoing morning stiffness ~45 min, symmetric hand/wrist swelling, reduced grip and dressing difficulty. Folic acid taken daily as prescribed. Last methotrexate dose Friday 10/16 — patient confirmed 6 tablets (2.5 mg each). Labs reviewed — within acceptable monitoring ranges. OT referral placed per provider order.')">
+          <span class="note-ts">08:50 — RN M. Alvarez</span>
+          <div class="note-preview">Patient presents for routine RA follow-up. Reports ongoing morning stiffness ~45 min, symmetric hand/wrist swelling...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+        <div class="note-card" onclick="openModal('09:10 — RN M. Alvarez ⚠ MEDICATION DISCREPANCY','Discrepancy identified: draft discharge instructions list methotrexate 15 mg daily. Signed provider plan and patient home record both specify weekly (Fridays only).\n\nDraft instructions placed on hold — NOT released to patient.\n\nDr. Osei and pharmacy notified for immediate reconciliation. Patient informed that instructions require correction before discharge. Patient asked whether she should take tablets tomorrow — instructed not to act on draft; final verified instructions will be provided before she leaves.\n\nNote: Daily methotrexate instead of weekly can cause fatal toxicity. Normal monitoring labs do not make daily dosing safe. Do not assume draft has been dispensed or administered.')">
+          <span class="note-ts" style="color:#c0392b;">09:10 — RN M. Alvarez ⚠ MEDICATION DISCREPANCY</span>
+          <div class="note-preview">Discrepancy identified: draft discharge instructions list methotrexate 15 mg daily. Signed provider plan and patient home record both specify weekly...</div>
+          <div class="note-hint">🔍 Click to read full note</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-content single" id="D-sbar">
+    <div class="section span2">
+      <div class="sec-title" onclick="toggleSection(this)">Example SBAR Communication <span class="toggle-icon">▾</span></div>
+      <div class="sec-body">
+        <div class="sbar-grid">
+          <div class="sbar-label">S</div>
+          <div class="sbar-text">Leah's draft medication instructions conflict with her signed methotrexate plan.</div>
+          <div class="sbar-label">B</div>
+          <div class="sbar-text">Established RA regimen 15 mg weekly on Fridays; last reported dose 10/16. No clinic dose was administered today.</div>
+          <div class="sbar-label">A</div>
+          <div class="sbar-text">Draft list says 15 mg daily; she asks whether to take six tablets tomorrow. Daily MTX for RA can cause fatal toxicity.</div>
+          <div class="sbar-label">R</div>
+          <div class="sbar-text">Correct and verify the final instructions before release, reconcile the prescription, and confirm patient understanding via teach-back.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-footer"><span>FICTIONAL TRAINING DATA — NOT FOR CLINICAL USE</span><span>Patient D · Page 4 of 4</span></div>
+</div>
+
+</div><!-- /main -->
+
+<!-- MODAL -->
+<div id="modal-overlay" onclick="closeModalOutside(event)">
+  <div id="modal-box">
+    <div id="modal-header">
+      <h3 id="modal-title">Nursing Note</h3>
+      <button id="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+function showPatient(id, btn){
+  document.querySelectorAll('.chart-card').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('.pt-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('chart-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+function showTab(patient, tabId, btn){
+  const card = document.getElementById('chart-'+patient);
+  card.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  card.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const target = document.getElementById(patient+'-'+tabId);
+  if(target) target.classList.add('active');
+  btn.classList.add('active');
+}
+function toggleSection(titleEl){
+  titleEl.classList.toggle('collapsed');
+  const body = titleEl.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+function openModal(title, text){
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = text.split('\n').map(l=>l?`<p style="margin-bottom:8px;">${l}</p>`:'<br/>').join('');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+function closeModalOutside(e){
+  if(e.target===document.getElementById('modal-overlay')) closeModal();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeModal();});
+</script>
+</body>
+</html>
